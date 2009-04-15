@@ -5,7 +5,8 @@ Version:	0.8
 Release:	0.b.%{rel}
 License:	BSD
 Group:		Applications
-Source0:	http://bcable.net/archive.php?%{name}-%{version}b.sh
+# Source0Download:	http://bcable.net/archive.php?%{name}-%{version}b.sh
+Source0:	%{name}-%{version}b.sh
 # Source0-md5:	40702eb5397dfd4134ad7761a15a5e88
 Patch0:		%{name}-bashism.patch
 URL:		http://bcable.net/project.php?sqlier
